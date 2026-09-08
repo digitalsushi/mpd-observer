@@ -1,0 +1,16 @@
+README.md
+setup.cfg
+setup.py
+src/mpd_observer/__init__.py
+src/mpd_observer/app.py
+src/mpd_observer/mpd.py
+src/mpd_observer/observer.py
+src/mpd_observer/online_artwork.py
+src/mpd_observer/raudio.py
+src/mpd_observer/settings.py
+src/mpd_observer/weather.py
+src/mpd_observer.egg-info/PKG-INFO
+src/mpd_observer.egg-info/SOURCES.txt
+src/mpd_observer.egg-info/dependency_links.txt
+src/mpd_observer.egg-info/entry_points.txt
+src/mpd_observer.egg-info/top_level.txt

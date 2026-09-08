@@ -1,0 +1,2 @@
+"""MPD Observer kiosk application."""
+

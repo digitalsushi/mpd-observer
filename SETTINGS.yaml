@@ -1,0 +1,71 @@
+mpd:
+  host: ""
+  port: 6600
+  connect_timeout_seconds: 3
+  reconnect_max_seconds: 30
+  stream_metadata_poll_seconds: 10
+
+artwork:
+  raudio_http:
+    enabled: false
+    base_url: ""
+    timeout_seconds: 3
+    max_bytes: 10485760
+  musicbrainz:
+    enabled: true
+    cache_directory: .cache/mpd-observer/artwork
+    # 0 keeps confident MusicBrainz matches until manually evicted.
+    positive_ttl_seconds: 0
+    negative_ttl_seconds: 21600
+    timeout_seconds: 10
+    max_bytes: 10485760
+    minimum_match_score: 95
+    user_agent: "MPDObserver/0.1 (personal LAN kiosk)"
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+debug:
+  maximum_lines: 2500
+  refresh_seconds: 5
+
+deployment:
+  host: ""
+  username: ""
+  identity_file: "~/.ssh/id_rsa"
+  directory: mpd-observer
+
+weather:
+  enabled: true
+  provider: open_meteo
+  # Walt Disney World, Orlando: harmless repository defaults.
+  latitude: 28.3772
+  longitude: -81.5707
+  refresh_interval_seconds: 3600
+  severe_forecast_hours: 6
+  stale_after_seconds: 10800
+  timeout_seconds: 10
+  cache_file: .cache/mpd-observer/weather.json
+  mock_condition: ""
+  mock_temperature_f: 72
+
+display:
+  title: MPD Observer
+  width: 1920
+  height: 480
+  track_text_colors:
+    white: "#ffffff"
+    red: "#ff3038"
+    texas_orange: "#bf5700"
+    yellow: "#ffe600"
+    electric_blue: "#168cff"
+    bright_magenta: "#ff24d3"
+  theme:
+    background: "#080a0d"
+    foreground: "#f5f2eb"
+    muted: "#a7adb7"
+    accent: "#db9c52"
+  fallback_artwork: true
+  refresh_interval_ms: 2000
+  show_clock: true

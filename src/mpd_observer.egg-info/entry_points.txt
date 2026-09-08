@@ -1,0 +1,3 @@
+[console_scripts]
+mpd-observer = mpd_observer.app:main
+
