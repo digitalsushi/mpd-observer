@@ -43,9 +43,12 @@ Relative cache paths remain relative to the application's working directory.
 The optional `artwork.raudio_http` section enables rAudio stream metadata and
 artwork as a fallback; standard MPD artwork remains the primary source. The
 observer takes one read-only MPD snapshot every
-`mpd.stream_metadata_poll_seconds`; it does not hold `idle` connections open.
-The heavier rAudio `status.sh` enrichment runs only once per raw stream title
-and is reused until MPD reports a new title.
+`mpd.stream_metadata_poll_seconds` over one persistent connection; it does not
+hold `idle` connections open or reconnect between healthy snapshots. For HTTP
+streams, conventional `Artist - Title` metadata is parsed locally and MPD
+artwork probes plus the heavier rAudio `status.sh` enrichment are skipped.
+rAudio enrichment remains available for non-stream sources and runs once per
+raw track title.
 The optional `artwork.musicbrainz` section adds a final online lookup through
 MusicBrainz and the Cover Art Archive. Results and misses are cached on disk;
 the cache location and lifetimes are configurable. With

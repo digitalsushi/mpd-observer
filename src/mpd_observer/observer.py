@@ -2,7 +2,7 @@ import threading
 import time
 from typing import Dict
 
-from .mpd import read_snapshot
+from .mpd import MpdConnection, read_snapshot_from_connection
 from .online_artwork import read_track_info
 from .raudio import read_status as read_raudio_status
 from .settings import MpdSettings, MusicBrainzSettings, RAudioSettings
@@ -46,14 +46,17 @@ class Observer:
         delay = 1.0
         while not self._stop.is_set():
             try:
-                snapshot = read_snapshot(self.settings)
-                self._enrich(snapshot)
-                self._set(snapshot)
-                self._schedule_online_duration(snapshot)
-                delay = 1.0
-                self._stop.wait(self.settings.stream_metadata_poll_seconds)
+                with MpdConnection(self.settings) as client:
+                    delay = 1.0
+                    while not self._stop.is_set():
+                        snapshot = read_snapshot_from_connection(client)
+                        self._enrich(snapshot)
+                        self._set(snapshot)
+                        self._schedule_online_duration(snapshot)
+                        self._stop.wait(self.settings.stream_metadata_poll_seconds)
             except Exception as error:
                 self._set(self._offline(str(error)))
+                print(f"MPD observer: unavailable: {error}", flush=True)
                 self._stop.wait(delay)
                 delay = min(delay * 2, self.settings.reconnect_max_seconds)
 
@@ -62,6 +65,8 @@ class Observer:
             return
         track = snapshot.get("track")
         if not isinstance(track, dict):
+            return
+        if str(track.get("uri", "")).startswith(("http://", "https://")):
             return
         # rAudio's endpoint launches status.sh. Query it once per raw MPD title,
         # then reuse that result instead of spawning shell work every poll.

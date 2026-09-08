@@ -1,6 +1,7 @@
 import socket
 from dataclasses import dataclass
 from typing import BinaryIO, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from .settings import MpdSettings
 
@@ -104,28 +105,51 @@ class MpdConnection:
 
 def read_snapshot(settings: MpdSettings) -> Dict[str, object]:
     with MpdConnection(settings) as client:
-        status = _pairs(client.command("status"))
-        song = _pairs(client.command("currentsong"))
-        elapsed = _number(status.get("elapsed"))
-        duration = _number(status.get("duration") or song.get("Time"))
-        return {
-            "connected": True,
-            "mpd_version": client.version,
-            "state": status.get("state", "unknown"),
-            "elapsed": elapsed,
-            "duration": duration,
-            "observed_at": __import__("time").time(),
-            "track": {
-                "uri": song.get("file", ""),
-                "title": song.get("Title") or _filename(song.get("file", "")),
-                "artist": song.get("Artist") or song.get("AlbumArtist") or "",
-                "album": song.get("Album") or "",
-                "date": song.get("Date", ""),
-            } if song else None,
-        }
+        return read_snapshot_from_connection(client)
+
+
+def read_snapshot_from_connection(client: MpdConnection) -> Dict[str, object]:
+    """Read a snapshot without taking ownership of an existing connection."""
+    status = _pairs(client.command("status"))
+    song = _pairs(client.command("currentsong"))
+    elapsed = _number(status.get("elapsed"))
+    duration = _number(status.get("duration") or song.get("Time"))
+    track = _track(song) if song else None
+    return {
+        "connected": True,
+        "mpd_version": client.version,
+        "state": status.get("state", "unknown"),
+        "elapsed": elapsed,
+        "duration": duration,
+        "observed_at": __import__("time").time(),
+        "track": track,
+    }
+
+
+def _track(song: Dict[str, str]) -> Dict[str, str]:
+    uri = song.get("file", "")
+    title = song.get("Title") or _filename(uri)
+    artist = song.get("Artist") or song.get("AlbumArtist") or ""
+    # Icecast commonly places both fields in Title. Parse the conventional
+    # separator locally so observing a stream does not invoke rAudio's PHP and
+    # status.sh stack merely to split metadata.
+    if not artist and urlparse(uri).scheme in ("http", "https") and " - " in title:
+        artist, title = title.split(" - ", 1)
+    return {
+        "uri": uri,
+        "title": title.strip(),
+        "artist": artist.strip(),
+        "album": song.get("Album") or "",
+        "date": song.get("Date", ""),
+    }
 
 
 def read_artwork(settings: MpdSettings, uri: str) -> Optional[Tuple[bytes, str]]:
+    # MPD cannot provide embedded artwork for this appliance's infinite HTTP
+    # streams. Avoid spending two additional client connections per track on
+    # readpicture/albumart probes that are known to return nothing.
+    if urlparse(uri).scheme in ("http", "https"):
+        return None
     for command in ("readpicture", "albumart"):
         chunks = bytearray()
         content_type = "application/octet-stream"

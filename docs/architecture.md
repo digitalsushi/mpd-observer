@@ -20,6 +20,10 @@ behind the normalized model, uses one fixed status request, and accepts artwork
 only from the configured rAudio HTTP origin. Standard MPD remains the primary
 source.
 
+The observer keeps one MPD connection for periodic snapshots and reconnects
+only after failure. HTTP stream titles are parsed locally; known-empty MPD
+artwork probes and rAudio shell-based enrichment are not used for those URIs.
+
 If neither local source supplies artwork, an optional MusicBrainz provider uses
 an exact artist/title match to identify a release group and retrieves its front
 image from the Cover Art Archive. Both successful images and misses are cached
