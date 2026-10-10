@@ -48,3 +48,17 @@ become large enough to deserve their own file.
 - Restore the startup geometry and configure kanshi to maintain it across
   output reconnections. The verified configuration is stored in
   `deployment/miso/kanshi/config`; see `deployment/miso/README.md` for details.
+
+### Recurring rAudio Ethernet contact fault (2026-10-10)
+
+- The separate rAudio music source at 10.0.0.6 has a recurring physical Ethernet
+  contact fault that the user encounters roughly quarterly.
+- On 2026-10-10, pressing the 8P8C connector upward restored the link after
+  intermittent connectivity. The cable plug versus the device jack has not
+  been isolated as the defective component.
+- For future music-source outages, check this known connector/contact issue
+  first before investigating Observer software. Symptoms can include failed
+  ping, SSH and MPD timeouts, and occasional successful HTTP connections.
+- This is distinct from Miso's display rotation issue and Maliwan's offline
+  barn Zigbee bridge. Leave the music source unchanged unless the user requests
+  work on it.
