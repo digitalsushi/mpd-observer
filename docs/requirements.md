@@ -32,3 +32,19 @@ while the proof of concept develops.
 
 Record consequential choices here or as focused decision records when they
 become large enough to deserve their own file.
+
+### Miso display recovery (2026-10-10)
+
+- Miso is the Raspberry Pi 4 at 10.0.0.8 running two Chromium displays under
+  labwc. `miso.lan` did not resolve during this investigation; SSH by IP worked.
+- The browsers load MPD Observer from `http://sora.lan:8081/` and gauge-card
+  from `http://sora.lan:8082/`. Sora resolved to 10.0.0.142.
+- 10.0.0.6 is the separate rAudio music source; leave it untouched when fixing
+  Miso's displays. The local deployment settings targeting `pi.lan` are stale
+  for this installation.
+- Following a reported monitor power interruption, both HDMI outputs were
+  unrotated despite correct rotations in the startup script. Miso's running
+  kanshi display manager had an empty configuration.
+- Restore the startup geometry and configure kanshi to maintain it across
+  output reconnections. The verified configuration is stored in
+  `deployment/miso/kanshi/config`; see `deployment/miso/README.md` for details.
