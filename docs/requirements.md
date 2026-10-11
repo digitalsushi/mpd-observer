@@ -62,3 +62,13 @@ become large enough to deserve their own file.
 - This is distinct from Miso's display rotation issue and Maliwan's offline
   barn Zigbee bridge. Leave the music source unchanged unless the user requests
   work on it.
+
+### Maliwan power recovery (2026-10-11)
+
+- Maliwan is the barn Zigbee coordinator serving thermometers T01, T03, and
+  T06. Its last known IP was 10.0.0.192.
+- The user confirmed that Maliwan requires a physical power-button press
+  after any power event; it does not power back on automatically.
+- When these thermometers become unavailable after a power event, first
+  arrange a physical power-button press on Maliwan before investigating DHCP,
+  network connectivity, or Home Assistant's API.
