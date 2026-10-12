@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gauge-card</title>
+<style>
+*{box-sizing:border-box;cursor:none!important}html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
+svg{width:100%;height:100%;display:block;font-family:'Arial',sans-serif}
+.numeral{fill:#e6dec2;font-size:27px;font-weight:600;text-anchor:middle;dominant-baseline:central;letter-spacing:1px}
+.legend{fill:#8b8b77;font-size:10px;letter-spacing:3px;text-anchor:middle}
+.weather-arrow{fill:#ece5cd;stroke:#ece5cd;stroke-width:.8}
+@keyframes lightning-pulse{0%,100%{filter:brightness(.5)}50%{filter:brightness(1)}}
+.weather-arrow.lightning{fill:#ed302a;stroke:#ed302a;animation:lightning-pulse 2s ease-in-out infinite}
+.aircraft-altitude,.aircraft-callsign{paint-order:stroke;stroke:#0c100e;stroke-width:3px;stroke-linejoin:round}
+@keyframes iss-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+.iss-pulse{animation:iss-pulse 1s ease-in-out infinite}
+#thermometer.emergency text:not(#oil-level){fill:#000!important}
+.hand{stroke:#171d1a;stroke-width:2;stroke-linejoin:round}
+#oil-level{font-size:16px;letter-spacing:.5px;text-anchor:middle}
+#oil-level.critical{font-weight:800;animation:oil-pulse 1.5s ease-in-out infinite}
+@keyframes oil-pulse{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes ice-turn{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.ice-bezel{transform-box:view-box;transform-origin:0px 0px}
+.ice-bezel.turning{animation:ice-turn 60s linear infinite}
+</style>
+<svg viewBox="0 0 1920 480" role="img" aria-label="24-hour aviator watch, sky and weather dial, and Home Assistant thermometer">
+<defs>
+ <radialGradient id="face"><stop stop-color="#171d19"/><stop offset=".8" stop-color="#0c100e"/><stop offset="1" stop-color="#060908"/></radialGradient>
+ <linearGradient id="bezel" x2=".7" y2="1"><stop stop-color="#52564e"/><stop offset=".25" stop-color="#181d19"/><stop offset=".6" stop-color="#080b09"/><stop offset="1" stop-color="#393e35"/></linearGradient>
+ <filter id="lume" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.2"/></filter>
+ <linearGradient id="date-rim" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#858a7e"/><stop offset=".3" stop-color="#242921"/><stop offset=".7" stop-color="#070a08"/><stop offset="1" stop-color="#686c5c"/></linearGradient>
+ <linearGradient id="date-paper" x2="0" y2="1"><stop stop-color="#a9aa96"/><stop offset=".35" stop-color="#eee9d3"/><stop offset=".75" stop-color="#d7d4bd"/><stop offset="1" stop-color="#939784"/></linearGradient>
+ <linearGradient id="date-glass" x1="0" y1="0" x2=".4" y2="1"><stop stop-color="#ffffff" stop-opacity=".35"/><stop offset=".28" stop-color="#ffffff" stop-opacity=".02"/><stop offset=".7" stop-color="#bacfc6" stop-opacity=".04"/><stop offset="1" stop-color="#e4eee6" stop-opacity=".25"/></linearGradient>
+ <clipPath id="date-clip"><rect x="-24" y="-18" width="48" height="36" rx="7"/></clipPath>
+ <mask id="date-edge"><rect x="-30" y="-22" width="60" height="44" fill="white"/><rect x="-14" y="-10" width="28" height="20" rx="5" fill="black"/></mask>
+ <filter id="date-warp" x="-30%" y="-40%" width="160%" height="180%"><feTurbulence type="fractalNoise" baseFrequency=".035 .055" numOctaves="1" seed="8" result="glass"/><feDisplacementMap in="SourceGraphic" in2="glass" scale="5" xChannelSelector="R" yChannelSelector="G"/></filter>
+ <radialGradient id="laundry-green"><stop stop-color="#d2ffb2"/><stop offset=".25" stop-color="#77ed65"/><stop offset=".65" stop-color="#26913c"/><stop offset="1" stop-color="#123b1a"/></radialGradient>
+ <filter id="laundry-glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="4"/></filter>
+</defs>
+<g id="watch" transform="translate(320 240)"></g>
+<g id="weather" transform="translate(960 240)"></g>
+<g id="thermometer" transform="translate(1600 240)"></g>
+<g id="laundry-led" transform="translate(640 434.4)" opacity="0" aria-hidden="true" role="img" aria-label="Laundry cycle completed within the last 15 minutes">
+ <circle r="19" fill="#42cf50" opacity=".35" filter="url(#laundry-glow)"/>
+ <circle r="21.6" fill="#101b11" stroke="#3b4939" stroke-width="1"/>
+ <circle r="18" fill="url(#laundry-green)"/>
+ <ellipse cx="-5" cy="-6" rx="6" ry="3" fill="#e8ffda" opacity=".3"/>
+</g>
+</svg>
+<script type="module">
+import {thunderstormSlots, forecastSlots, forecastHourLabels, watchAngles, solarAngles, solarNoonAngle, rainArrowFraction, rainArrowPath} from './aviator-weather.mjs';
+import {startLaundryIndicator} from './laundry.mjs';
+startLaundryIndicator(document.querySelector('#laundry-led'));
+import {temperatureRange,temperatureAngle,thermometerFace} from './thermometer.mjs';
+import {issMarker} from './iss.mjs';
+import {moonMarker,sunMarker,sunDayPath,daylightPercent} from './moon.mjs';
+import {visibleAircraft,gaugeMode,aircraftAltitudeLabel} from './aircraft.mjs';
+import {projectedStateBorders,projectedCoastline,stateBorderLabels} from './state-borders.mjs';
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs={},parent,text){const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;parent?.append(n);return n}
+const watch=document.querySelector('#watch'),weather=document.querySelector('#weather');
+function point(angle,r){return [Math.sin(angle*Math.PI/180)*r,-Math.cos(angle*Math.PI/180)*r]}
+function dial(parent,weatherFace=false){
+ el('circle',{r:216,fill:'url(#bezel)',stroke:'#343b32','stroke-width':1},parent);
+ el('circle',{r:205,fill:'url(#face)',stroke:'#797c6555','stroke-width':1},parent);
+ el('circle',{r:194,fill:'none',stroke:'#858b6a22','stroke-width':1},parent);
+ const count=weatherFace?60:120;
+ for(let i=0;i<count;i++){
+  const major=i%5===0;
+  const [x1,y1]=point(i*360/count,major?177:185),[x2,y2]=point(i*360/count,191);
+  el('line',{x1,y1,x2,y2,stroke:major?'#d4cdaa':'#656c55','stroke-width':major?3:1},parent);
+ }
+ el('path',{d:'M -6 -199 L 6 -199 L 0 -190 Z',fill:'#e3d7ad'},parent);
+}
+dial(watch);dial(weather,true);
+const thermometer=document.querySelector('#thermometer');
+let thermometerData=null,thermometerFailure=null;
+let oilData=null;
+const mockMode=new URLSearchParams(location.search).get('freezeMock');
+const mockStarted=Date.now();
+if(new URLSearchParams(location.search).has('dialOnly')){
+ document.querySelector('svg').setAttribute('viewBox','1360 0 480 480');
+ for(const id of ['watch','weather','laundry-led'])document.getElementById(id).style.display='none';
+}
+function mockThermometer(data){
+ if(!['cycle','normal','plateau','below'].includes(mockMode))return data;
+ const state=mockMode==='cycle'?['normal','plateau','below'][Math.floor((Date.now()-mockStarted)/15000)%3]:mockMode;
+ const sensors=structuredClone(data.sensors);
+ const values=[new URLSearchParams(location.search).has('dialOnly')?32:state==='below'?30:32,36,39,34];
+ [data.settings.main,...data.settings.needles].forEach((entity,i)=>{sensors[entity]={...sensors[entity],entity,value:values[i]}});
+ Object.values(data.settings.humidities).forEach(entity=>{sensors[entity]={...sensors[entity],entity,value:55}});
+ return {...data,sensors,available:true,error:null,stale:false,emergency:false,fetchedAt:Date.now()/1000,freezing:{state},mock:true};
+}
+function drawThermometer(){
+ const data=thermometerData?mockThermometer(thermometerData):null,c=data?.settings;
+ const stale=data?.available&&(data.stale||Date.now()/1000-data.fetchedAt>90);
+ const healthy=data?.available&&!data.error&&!thermometerFailure&&!stale;
+ const sensors=healthy?data.sensors:{};
+ const main=c?sensors[c.main]:null;
+ const humidities=c?.humidities||{[c?.main]:c?.humidity};
+ const readings=(c?.needles||[]).map(entity=>sensors[entity]||{entity,label:data?.sensors?.[entity]?.label||entity,value:null});
+ const range=temperatureRange([main?.value,...readings.map(r=>r.value)],c?.minimumF??20,c?.maximumF??100);
+ const emergency=!!data?.emergency;
+ thermometer.classList.toggle('emergency',emergency);
+ thermometer.replaceChildren();
+ el('circle',{r:216,fill:'url(#bezel)',stroke:'#343b32','stroke-width':1},thermometer);
+ el('circle',{r:205,fill:thermometerFace(data?.freezing?.state,healthy,emergency),stroke:'#797c6555','stroke-width':1},thermometer);
+ if(healthy&&!emergency&&['plateau','below'].includes(data?.freezing?.state)){
+  const moving=data.freezing.state==='plateau';
+  const ring=el('g',{class:`ice-bezel${moving?' turning':''}`,style:moving?`animation-delay:-${(Date.now()%60000)/1000}s`:''},thermometer);
+  el('circle',{r:211,fill:'none',stroke:'#ffffff','stroke-width':2,opacity:.4},ring);
+  // Graduated brightness and length make clockwise travel visible.
+  for(let i=0;i<48;i++){
+   const angle=i*7.5,head=i<12;
+   const [x1,y1]=point(angle,head?204:208),[x2,y2]=point(angle,215);
+   el('line',{x1,y1,x2,y2,stroke:'#ffffff','stroke-width':head?3:2,opacity:head?1-i*.06:.22},ring);
+  }
+  const [cx,cy]=point(0,211);
+  el('circle',{cx,cy,r:4,fill:'#fff'},ring);
+ }
+
+ el('circle',{r:194,fill:'none',stroke:emergency?'#0004':'#858b6a22','stroke-width':1},thermometer);
+ const major=Math.ceil((range.max-range.min)/80)*10,minor=major/5;
+ const firstTick=Math.ceil(range.min/minor)*minor;
+ const tickValues=[...new Set([range.min,range.max,...Array.from({length:Math.floor((range.max-firstTick)/minor)+1},(_,i)=>firstTick+i*minor)])].sort((a,b)=>a-b);
+ for(const t of tickValues){
+  const large=Math.abs(t/major-Math.round(t/major))<.001||t===range.min||Math.abs(t-range.max)<.001;
+  const angle=temperatureAngle(t,range),[x1,y1]=point(angle,large?180:186),[x2,y2]=point(angle,191);
+  el('line',{x1,y1,x2,y2,stroke:emergency?'#17130f':large?'#d4cdaa':'#656c55','stroke-width':large?3:1},thermometer);
+  if(large){const [x,y]=point(angle,164);el('text',{x,y,class:'numeral',style:'font-size:20px'},thermometer,String(Math.round(t)))}
+ }
+ // Paint T01 first so overlapping temperature arrows remain above it.
+ const colors={[c?.main]:'#8bcaff','sensor.thermometer_t_10_temperature':'#ed302a','sensor.thermometer_t_06_temperature':'#36cf65','sensor.thermometer_t_03_temperature':'#ffffff'};
+ for(const reading of [main,...readings].filter(r=>Number.isFinite(r?.value))){
+  el('path',{class:'temperature-needle','data-entity':reading.entity,d:'M -2 -92 L -2 -133 L -6 -130 L 0 -150 L 6 -130 L 2 -133 L 2 -92 Z',transform:`rotate(${temperatureAngle(reading.value,range)})`,fill:colors[reading.entity],stroke:'#070b08','stroke-width':1},thermometer);
+  if(reading.entity===c.main)el('circle',{class:'temperature-needle-ring',cx:0,cy:-112.5,r:6,transform:`rotate(${temperatureAngle(reading.value,range)})`,fill:'none',stroke:colors[reading.entity],'stroke-width':2},thermometer);
+ }
+ const humidityPositions=[];
+ for(const reading of [main,...readings].filter(r=>Number.isFinite(r?.value))){
+  const humidity=sensors[humidities[reading.entity]];
+  const angle=temperatureAngle(reading.value,range);
+  const [x,y]=point(angle,77);
+  // Keep RH adjacent to its arrow; omit crowded labels instead of displacing them.
+  if(humidityPositions.some(p=>Math.abs(p.x-x)<28&&Math.abs(p.y-y)<20))continue;
+  humidityPositions.push({x,y});
+  el('text',{x,y,class:'aircraft-altitude temperature-humidity','data-entity':reading.entity,fill:'#d4cdaa','font-size':18,'letter-spacing':.3,'text-anchor':'middle','dominant-baseline':'central'},thermometer,Number.isFinite(humidity?.value)?String(Math.round(humidity.value)):'—');
+ }
+ const missing=healthy&&[main,...readings,...Object.values(humidities).map(entity=>sensors[entity])].some(r=>!Number.isFinite(r?.value));
+ const error=thermometerFailure||data?.error||(stale?'stale':missing?'sensor unavailable':null);
+ el('text',{y:58,class:'legend',style:`font-size:10px;letter-spacing:1px;fill:${error?'#f05a52':'#d4cdaa'}`},thermometer,data?.mock?`MOCK · ${data.freezing.state==='plateau'?'32°F · TRANSITION':data.freezing.state==='below'?'BELOW 32°F · FROZEN':'32°F UNDER 1 HOUR · NORMAL'}`:error?`[api error, HA ${error}]`:emergency?'T06 ABOVE 95°F':healthy?'':'CONNECTING');
+ const oilValid=oilData?.available&&Number.isInteger(oilData.percent)&&oilData.percent>=0&&oilData.percent<=100&&Date.now()/1000-oilData.fetchedAt<3900;
+ const oil=oilValid?oilData.percent:null;
+ const oilColor=oil===null||oil<=20?'#f05a52':oil<=25?'#eca34b':'#d4cdaa';
+ const oilLabel=el('text',{id:'oil-level',y:143,fill:oilColor,class:oil!==null&&oil<=15?'critical':''},thermometer,oil===null?'oil:ERROR':`oil:${String(oil).padStart(2,'0')}%`);
+ if(emergency){oilLabel.setAttribute('stroke','#070b08');oilLabel.setAttribute('stroke-width','2');oilLabel.setAttribute('paint-order','stroke')}
+ thermometer.setAttribute('aria-label' ,emergency?'Temperature emergency: T06 above 95 Fahrenheit':'Home Assistant temperatures and relative humidity');
+}
+drawThermometer();
+if(mockMode)setInterval(drawThermometer,1000);
+async function refreshThermometer(){
+ try{const r=await fetch('/api/thermometer',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error(r.status);const data=await r.json();if(!data.settings||!data.sensors)throw Error('invalid response');thermometerData=data;thermometerFailure=null}
+ catch(e){thermometerFailure=e.name==='TimeoutError'?'timeout':'fetch';console.warn('Thermometer fetch failed',e)}
+ drawThermometer();setTimeout(refreshThermometer,15000);
+}
+refreshThermometer();
+async function refreshOil(){
+ try{const r=await fetch('/api/oil-level',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error('unavailable');oilData=await r.json()}catch(e){oilData=null}
+ drawThermometer();setTimeout(refreshOil,60000);
+}
+refreshOil();
+
+for(let h=0;h<24;h+=2){const [x,y]=point(h*15,153);el('text',{x,y,class:'numeral'},watch,String(h).padStart(2,'0'))}
+el('text',{y:-62,class:'legend'},watch,'AVIATOR');
+el('text',{y:77,class:'legend'},watch,'24 HOUR');
+const solarDots={};
+for(const [event,color] of [['sunrise','#53df79'],['sunset','#f05a52'],['solarNoon','#f5d54a']]){
+ const dot=el('circle',{r:3.5,fill:color,display:'none'},watch);
+ el('title',{},dot,{sunrise:'Sunrise',sunset:'Sunset',solarNoon:'Solar noon'}[event]);solarDots[event]=dot;
+}
+// A raised cyclops lens over the date wheel, centered between the spindle and 06.
+const dateLens=el('g',{transform:'translate(76.5 0)'},watch);
+el('rect',{x:-30,y:-23,width:60,height:48,rx:12,fill:'#000',opacity:.65},dateLens);
+el('rect',{x:-29,y:-23,width:58,height:46,rx:11,fill:'url(#date-rim)',stroke:'#747a6655','stroke-width':1},dateLens);
+el('rect',{x:-25,y:-19,width:50,height:38,rx:8,fill:'url(#date-paper)',stroke:'#070b08','stroke-width':2},dateLens);
+const dateContent=el('g',{'clip-path':'url(#date-clip)'},dateLens);
+const dateTextAttrs={y:1,fill:'#171d19','font-size':34,'font-family':'Arial,sans-serif','font-weight':700,'text-anchor':'middle','dominant-baseline':'central','letter-spacing':-1};
+const dateText=el('text',dateTextAttrs,dateContent);
+const dateEdge=el('g',{mask:'url(#date-edge)'},dateContent);
+const dateWarp=el('text',{...dateTextAttrs,transform:'scale(1.09 1.12)',filter:'url(#date-warp)'},dateEdge);
+el('rect',{x:-25,y:-19,width:50,height:38,rx:8,fill:'url(#date-glass)',stroke:'#dce7d655','stroke-width':.8},dateLens);
+el('path',{d:'M -20 -12 Q -18 -17 -10 -17 L 13 -17',fill:'none',stroke:'#fff',opacity:.4,'stroke-width':1.3,'stroke-linecap':'round'},dateLens);
+el('path',{d:'M 24 -9 Q 27 9 19 16',fill:'none',stroke:'#e1ecdb',opacity:.25,'stroke-width':2},dateLens);
+const utcHour=el('g',{id:'utc-hour-hand'},watch);
+el('line',{x1:0,y1:13,x2:0,y2:-79,stroke:'#a9bec0','stroke-width':3,'stroke-linecap':'round'},utcHour);
+el('circle',{cx:0,cy:-84,r:5,fill:'#0c100e',stroke:'#c6d5d1','stroke-width':2},utcHour);
+el('title',{},utcHour,'UTC · 24-hour hand');
+const hyderabadHour=el('g',{id:'hyderabad-hour-hand'},watch);
+el('line',{x1:0,y1:0,x2:0,y2:-56,stroke:'#d8cb79','stroke-width':2.5,'stroke-linecap':'round'},hyderabadHour);
+el('path',{d:'M 0 -63 L 6 -56 L 0 -49 L -6 -56 Z',fill:'#b9ad67'},hyderabadHour);
+el('path',{d:'M 0 -62 L 3.5 -57 L -1 -52 L -4.5 -57 Z',fill:'#d8cb79'},hyderabadHour);
+el('title',{},hyderabadHour,'Hyderabad · IST · 24-hour hand');
+const hour=el('path' ,{d:'M -7 22 L -8 -80 L 0 -122 L 8 -80 L 7 22 Z',fill:'#ddcca2',class:'hand'},watch);
+const minute=el('path',{d:'M -4 28 L -4 -134 L 0 -173 L 4 -134 L 4 28 Z',fill:'#ece5cd',class:'hand'},watch);
+const second=el('g',{},watch);
+el('line',{x1:0,y1:24,x2:0,y2:-157,stroke:'#eca34b','stroke-width':1.5},second);
+el('path',{d:'M 0 -179 L -6 -156 L 6 -156 Z',fill:'#eca34b'},second);
+el('circle',{r:10,fill:'#aaa080',stroke:'#080b09','stroke-width':3},watch);
+el('circle',{r:3,fill:'#e9d9b1'},watch);
+const rainFace=el('g',{id:'rain-face'},weather);
+const arrows=[],forecastLabels=[];
+let labelHour=null;
+for(let i=0;i<12;i++){
+ const arrow=el('path',{transform:`rotate(${i*30}) scale(.75)`,class:'weather-arrow',display:'none'},rainFace);
+ el('title',{},arrow);arrows.push(arrow);
+ const [x,y]=point(i*30,153);
+ forecastLabels.push(el('text',{x,y,class:'numeral forecast-hour'},rainFace));
+}
+el('path',{id:'precipitation-cloud',d:'M-88 27 H-77 A3.5 3.5 0 0 0 -77 20 A5 5 0 0 0 -86 19 A4 4 0 0 0 -88 27 Z',fill:'none',stroke:'#8b8b77','stroke-width':1.2,'stroke-linejoin':'round','aria-hidden':'true'},rainFace);
+el('text',{y:28,class:'legend'},rainFace,'PRECIPITATION');
+const planeFace=el('g',{id:'plane-face',display:'none'},weather);
+const borderClip=el('clipPath',{id:'state-border-clip'},el('defs',{},planeFace));
+el('circle',{r:153},borderClip);
+const borderLayer=el('g',{id:'state-borders','clip-path':'url(#state-border-clip)','pointer-events':'none'},planeFace);
+let borderKey='';
+function drawStateBorders(location,settings){
+ const key=JSON.stringify([location,settings]);
+ if(key===borderKey)return;
+ borderKey=key;borderLayer.replaceChildren();
+ const ocean=el('path',{id:'nh-coastline',d:projectedCoastline(location,settings).path,fill:'none',stroke:'#438dcb','stroke-opacity':.65,'stroke-width':1.5,'stroke-linecap':'round','stroke-linejoin':'round'},borderLayer);
+ el('title',{},ocean,'NH seacoast at 35,000 feet reference altitude');
+ for(const border of projectedStateBorders(location,settings)){
+  const path=el('path',{'data-state':border.name,d:border.path,fill:'none',stroke:'#b1b49a','stroke-opacity':.34,'stroke-width':1.2,'stroke-linejoin':'round'},borderLayer);
+  el('title',{},path,`NH–${border.name} border at 35,000 feet reference altitude`);
+ }
+ for(const p of stateBorderLabels(location,settings))el('text',{x:p.x,y:p.y,'text-anchor':'middle',fill:'#b1b49a','fill-opacity':.6,'font-size':12,'letter-spacing':1.5},borderLayer,p.name);
+ el('text',{x:0,y:128,'text-anchor':'middle',fill:'#b1b49a','fill-opacity':.5,'font-size':9,'letter-spacing':.8},borderLayer,'35,000 FT REF');
+}
+const sunPath=el('path',{id:'sun-day-path',fill:'none',stroke:'#f5d54a','stroke-opacity':.23,'stroke-width':.6,'stroke-linecap':'round','clip-path':'url(#state-border-clip)'},planeFace);
+let sunPathKey='';
+const rose=el('g',{},planeFace);
+for(const r of [51,102,153])el('circle',{r,fill:'none',stroke:'#858b6a22','stroke-width':.7},rose);
+const directions=[];
+for(let i=0;i<8;i++){
+ const [x1,y1]=point(60+i*45,12),[x2,y2]=point(60+i*45,153),[x,y]=point(60+i*45,168);
+ const line=el('line',{x1,y1,x2,y2,stroke:'#858b6a33','stroke-width':.8},rose);
+ const label=el('text',{x,y:y+4,class:'legend',style:`font-size:${i%2?9:12}px;letter-spacing:1px;fill:${i===0?'#f05a52':'#aaa98d'}`},rose,['N','NE','E','SE','S','SW','W','NW'][i]);
+ directions.push({line,label});
+}
+el('circle',{r:2.5,fill:'#d4cdaa'},planeFace);
+const moonMark=el('g',{id:'moon-marker',display:'none'},planeFace);
+el('circle',{r:6,fill:'#000'},moonMark);
+const moonLight=el('path',{fill:'#ece5cd'},moonMark);
+el('circle',{r:6,fill:'none',stroke:'#ece5cd','stroke-width':1},moonMark);
+const moonTitle=el('title',{},moonMark);
+const sunMark=el('g',{id:'sun-marker',display:'none'},planeFace);
+for(let i=0;i<8;i++)el('path',{d:'M 0 -3.1 C -1.35 -4.1 1.3 -4.9 0 -6',transform:`rotate(${i*45})`,fill:'none',stroke:'#eca34b','stroke-width':.65,'stroke-linecap':'round'},sunMark);
+el('circle',{r:2.7,fill:'#e3b76f',stroke:'#ece5cd','stroke-width':.5},sunMark);
+const sunTitle=el('title',{},sunMark);
+const sunAltitude=el('text',{id:'sun-altitude',x:11,y:29,fill:'#d4cdaa','font-size':18,'letter-spacing':.3,class:'aircraft-callsign'},sunMark);
+let lastMoonStep='';
+function drawMoon(now){
+ if(!aircraftData?.location||!aircraftData?.settings)return;
+ const key=Math.floor(now/60000)+JSON.stringify([aircraftData.location,aircraftData.settings]);
+ if(key===lastMoonStep)return;lastMoonStep=key;
+ const pathKey=new Intl.DateTimeFormat('en-CA',{timeZone:timezone}).format(new Date(now))+JSON.stringify([aircraftData.location,aircraftData.settings]);
+ if(pathKey!==sunPathKey){
+  sunPathKey=pathKey;
+  sunPath.setAttribute('d',sunDayPath(now,aircraftData.location,aircraftData.settings,timezone));
+ }
+ const sun=sunMarker(now,aircraftData.location,aircraftData.settings);
+ sunMark.setAttribute('display',sun?'':'none');
+ if(sun){
+  sunMark.setAttribute('transform',`translate(${sun.x} ${sun.y})`);
+  const daylight=daylightPercent(now,aircraftData.location,timezone);
+  sunAltitude.textContent=`${Math.round(sun.elevation)}°${daylight===null?'':` / ${daylight}%`}`;
+  const labelY=sun.y+29;
+  const halfWidth=Math.sqrt(Math.max(0,190**2-Math.max(Math.abs(labelY),Math.abs(labelY-18))**2));
+  sunAltitude.setAttribute('x',Math.max(-halfWidth,Math.min(sun.x+11,halfWidth-sunAltitude.getComputedTextLength()))-sun.x);
+  sunTitle.textContent=`Sun · ${Math.round(sun.elevation)}° up`;
+  sunMark.setAttribute('aria-label',sunTitle.textContent);
+ }
+ const moon=moonMarker(now,aircraftData.location,aircraftData.settings);
+ moonMark.setAttribute('display',moon?'':'none');
+ if(!moon)return;
+ moonMark.setAttribute('transform',`translate(${moon.x} ${moon.y})`);
+ moonLight.setAttribute('d',['','M 0 -6 A 6 6 0 0 1 0 6 Z','M 0 -6 A 6 6 0 1 1 0 6 A 6 6 0 1 1 0 -6 Z','M 0 -6 A 6 6 0 0 0 0 6 Z'][moon.quarter]);
+ const phase=['New moon','Waxing / first quarter','Full moon','Waning / last quarter'][moon.quarter];
+ moonTitle.textContent=`${phase} · ${Math.round(moon.elevation)}° up`;
+ moonMark.setAttribute('aria-label',moonTitle.textContent);
+}
+const planeMarks=el('g',{id:'aircraft-marks'},planeFace);
+// Four times the 22px × 1.1 large-aircraft span: 96.8px overall.
+const issMark=el('g',{id:'iss-marker',display:'none'},planeFace);
+const issPulse=el('g',{class:'iss-pulse'},issMark);
+const issShape=el('g',{transform:'scale(4.4)',fill:'#ddcca2',stroke:'#ece5cd','stroke-width':.3},issPulse);
+el('path',{d:'M -11 -1 L 11 -1 L 11 1 L -11 1 Z'},issShape);
+for(const x of [-10,-6,4,8]){
+ el('rect',{x,y:-8,width:2,height:16,rx:.15,fill:'#b89c63'},issShape);
+ for(let y=-6;y<=6;y+=2)el('line',{x1:x,y1:y,x2:x+2,y2:y,stroke:'#343b32','stroke-width':.25},issShape);
+}
+el('path',{d:'M -1.2 -9 L 1.2 -9 L 1.2 -3 L 2 -2 L 2 3 L 1 4 L 1 9 L -1 9 L -1 4 L -2 3 L -2 -2 L -1.2 -3 Z'},issShape);
+el('text',{y:54,'text-anchor':'middle',fill:'#ece5cd','font-size':18,'letter-spacing':1},issMark,'ISS');
+const issTitle=el('title',{},issMark);
+let issData=null,issFailure=null,issDrawError=null,lastIssStep=-1;
+function drawISS(now){
+ const step=Math.floor(now/5000);
+ if(step===lastIssStep)return issDrawError;
+ lastIssStep=step;issDrawError=null;
+ try{
+  const stale=issData?.available&&now/1000-issData.epoch>7*86400;
+  if(issFailure||issData?.error||issData?.stale||stale){
+   issDrawError=`iss ${issFailure||issData?.error||'orbit stale'}`;
+   issMark.setAttribute('display','none');return issDrawError;
+  }
+  const marker=issMarker(issData,now,aircraftData?.location,aircraftData?.settings);
+  issMark.setAttribute('display',marker?'':'none');
+  if(marker){issMark.setAttribute('transform',`translate(${marker.x} ${marker.y})`);issTitle.textContent=`ISS · ${Math.round(marker.elevation)}° up`;issMark.setAttribute('aria-label',issTitle.textContent)}
+ }catch(e){issMark.setAttribute('display','none');issDrawError='iss orbit calculation';console.warn('ISS calculation failed',e)}
+ return issDrawError;
+}
+const emptyPlanes=el('text',{y:30,class:'legend',style:'font-size:9px;letter-spacing:1.5px'},planeFace,'');
+const status=el('text',{y:47,class:'legend',style:'font-size:9px;letter-spacing:1.5px;fill:#f05a52'},weather,'');
+const credit=el('a',{href:'https://open-meteo.com/',target:'_blank'},weather);
+const creditText=el('text',{y:232,class:'legend',style:'font-size:8px;letter-spacing:1px;fill:#69705a'},credit,'OPEN-METEO');
+let aircraftData=null,forecastFailure=null,aircraftFailure=null,lastPlaneStep=-1;
+function drawCompass(settings){
+ if(aircraftData?.location)drawStateBorders(aircraftData.location,settings);
+ directions.forEach(({line,label},i)=>{
+  const angle=settings.northAngleDegrees+i*45;
+  const [x1,y1]=point(angle,12),[x2,y2]=point(angle,153),[x,y]=point(angle,168);
+  for(const [k,v] of Object.entries({x1,y1,x2,y2}))line.setAttribute(k,v);
+  label.setAttribute('x',x);label.setAttribute('y',y+4);
+ });
+}
+function drawPlanes(now){
+ const settings=aircraftData?.settings;
+ if(!settings)return;
+ const step=Math.floor(now/(1000*settings.positionUpdateSeconds));
+ if(step===lastPlaneStep)return;
+ lastPlaneStep=step;
+ planeMarks.replaceChildren();
+ const planes=visibleAircraft(aircraftData,now/1000);
+ for(const a of planes){
+  const g=el('g',{transform:`translate(${a.x} ${a.y})`},planeMarks);
+  const shape=a.helicopter?'M -10 -2 L 10 -2 M 0 -10 L 0 10 M -3 8 L 3 8':'M 0 -11 L 2 -7 L 2 -2 L 10 3 L 10 5 L 2 3 L 2 8 L 5 10 L 5 11 L 0 9 L -5 11 L -5 10 L -2 8 L -2 3 L -10 5 L -10 3 L -2 -2 L -2 -7 Z';
+  el('path',{d:shape,transform:`rotate(${a.rotation}) scale(${a.helicopter?2.8:a.large?1.1:.7})`,fill:a.helicopter?'none':'#ece5cd',stroke:a.helicopter?'#ece5cd':'#0c100e','stroke-width':a.helicopter?2:1},g);
+  const heightLabel=el('text',{x:-11,y:-12,fill:'#d4cdaa','font-size':18,'letter-spacing':.3,'text-anchor':'end',class:'aircraft-altitude'},g,aircraftAltitudeLabel(a));
+  const callLabel=a.callsign?el('text',{x:11,y:29,fill:'#d4cdaa','font-size':18,'letter-spacing':.3,class:'aircraft-callsign'},g,a.callsign):null;
+  // Keep the larger lettering inside the bezel near the edge of the sky plot.
+  for(const label of [heightLabel,callLabel].filter(Boolean)){
+   const y=a.y+Number(label.getAttribute('y'));
+   const halfWidth=Math.sqrt(Math.max(0,190**2-Math.max(Math.abs(y),Math.abs(y-18))**2));
+   const width=label.getComputedTextLength(),end=label.getAttribute('text-anchor')==='end';
+   const left=a.x+Number(label.getAttribute('x'))-(end?width:0);
+   const fit=Math.max(-halfWidth,Math.min(left,halfWidth-width));
+   label.setAttribute('x',fit-a.x+(end?width:0));
+  }
+  el('title',{},g,`${a.callsign||a.id} ${a.aircraftType} · ${Math.round(a.elevation)}° up · ${a.distanceMiles.toFixed(1)} mi`);
+ }
+ emptyPlanes.textContent='';
+ planeFace.setAttribute('aria-label',`${planes.length} aircraft above ${settings.minimumElevationDegrees} degrees`);
+}
+const timezone=new URLSearchParams(location.search).get('timezone')||'America/New_York';
+const dateFormat=new Intl.DateTimeFormat('en-US',{timeZone:timezone,day:'numeric'});
+const format=new Intl.DateTimeFormat('en-GB',{timeZone:timezone,hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
+let forecast=null;
+function drawHands(){
+ const now=Date.now(),parts=Object.fromEntries(format.formatToParts(new Date(now)).map(p=>[p.type,p.value]));
+ const utcDate=new Date(now);
+ const utcAngle=watchAngles(utcDate.getUTCHours(),utcDate.getUTCMinutes(),utcDate.getUTCSeconds()+utcDate.getUTCMilliseconds()/1000).hour;
+ utcHour.setAttribute('transform',`rotate(${utcAngle})`);
+ const indiaDate=new Date(now+5.5*60*60*1000);
+ const indiaAngle=watchAngles(indiaDate.getUTCHours(),indiaDate.getUTCMinutes(),indiaDate.getUTCSeconds()+indiaDate.getUTCMilliseconds()/1000).hour;
+ hyderabadHour.setAttribute('transform',`rotate(${indiaAngle})`);
+ const angles=watchAngles(+parts.hour,+parts.minute,+parts.second+(now%1000)/1000);
+ hour.setAttribute('transform',`rotate(${angles.hour})`);minute.setAttribute('transform',`rotate(${angles.minute})`);
+ second.setAttribute('transform',`rotate(${angles.second})`);
+}
+function draw(){
+ const now=Date.now();
+ const day=dateFormat.format(new Date(now));
+ if(dateText.textContent!==day){dateText.textContent=day;dateWarp.textContent=day;dateLens.setAttribute('aria-label',`Day of month: ${day}`)}
+ const sun=solarAngles(forecast,now,timezone);
+ sun.solarNoon=solarNoonAngle(now,aircraftData?.location,timezone);
+ for(const [event,dot] of Object.entries(solarDots)){
+  const angle=sun[event];dot.setAttribute('display',angle===null?'none':'');
+  if(angle!==null){const [x,y]=point(angle,130);dot.setAttribute('cx',x);dot.setAttribute('cy',y)}
+ }
+ const currentHour=Math.floor(now/3600000);
+ if(labelHour!==currentHour){
+  const labels=forecastHourLabels(now/1000,timezone);
+  forecastLabels.forEach((label,i)=>{label.textContent=labels[i]});labelHour=currentHour;
+ }
+ const slots=forecastSlots(forecast,now/1000);
+ const storms=thunderstormSlots(forecast,now/1000);
+ arrows.forEach((a,i)=>{a.classList.toggle('lightning',storms[i]);a.setAttribute('display',rainArrowFraction(slots[i])?'':'none');a.setAttribute('d',rainArrowPath(slots[i]));a.querySelector('title').textContent=`${i===0?'Now':`In ${i} hours`}: ${slots[i]??'unknown'}% chance${storms[i]?'; thunderstorm forecast':''}`});
+ const mode=forecastFailure?'error':gaugeMode(forecast,slots,now/1000);
+ rainFace.setAttribute('display',mode==='weather'?'':'none');
+ planeFace.setAttribute('display',mode==='aircraft'?'':'none');
+ let error=forecastFailure||(forecast?.error?`forecast ${forecast.error}`:null)||(mode==='error'?'forecast unavailable':null)||aircraftFailure||(aircraftData?.error?`aircraft ${aircraftData.error}`:null);
+ if(mode==='aircraft'){
+  drawMoon(now);
+  if(aircraftData?.settings)drawCompass(aircraftData.settings);
+  const stale=aircraftData&&now/1000-aircraftData.fetchedAt>aircraftData.settings.maximumPositionAgeSeconds;
+  error=error||(aircraftData?.stale||stale?'aircraft stale':null);
+  if(!aircraftData?.available&&!error){emptyPlanes.textContent='LOADING AIRCRAFT';planeMarks.replaceChildren()}
+  else if(error){planeMarks.replaceChildren();emptyPlanes.textContent=''}
+  else drawPlanes(now);
+ }
+ const issError=drawISS(now);
+ error=error||issError;
+ if(mode==='aircraft'&&issMark.getAttribute('display')!=='none')emptyPlanes.textContent='';
+ status.textContent=error?`[api error, ${error}]`:'';
+ credit.setAttribute('href',mode==='aircraft'?'https://www.adsb.lol/':'https://open-meteo.com/');
+ creditText.textContent=mode==='aircraft'?'ADSB.LOL · CELESTRAK · OPEN-METEO':'OPEN-METEO';
+ weather.setAttribute('aria-label',error?status.textContent:mode==='weather'?'Precipitation chance: '+slots.map((v,i)=>`${i} hours ahead ${v}%`).join(', '):'Aircraft sky view');
+}
+async function refresh(){
+ try{const r=await fetch('/api/forecast',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error(`forecast ${r.status}`);forecast=await r.json();forecastFailure=null}
+ catch(e){forecastFailure='forecast '+(e.name==='TimeoutError'?'timeout':'fetch');console.warn('Forecast fetch failed',e)}draw()
+}
+async function refreshAircraft(){
+ try{const r=await fetch('/api/aircraft',{cache:'no-store',signal:AbortSignal.timeout(4000)});if(!r.ok)throw Error(r.status);const data=await r.json();if(!data.settings||!Array.isArray(data.aircraft))throw Error('invalid response');aircraftData=data;aircraftFailure=null}
+ catch(e){aircraftFailure='aircraft '+(e.name==='TimeoutError'?'timeout':'fetch');console.warn('Aircraft fetch failed',e)}
+ draw();setTimeout(refreshAircraft,5000);
+}
+
+async function refreshISS(){
+ try{const r=await fetch('/api/iss',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error(`http ${r.status}`);const data=await r.json();if(data.available&&(!Array.isArray(data.tle)||data.tle.length!==2))throw Error('invalid orbit');issData=data;issFailure=null}
+ catch(e){issFailure=e.name==='TimeoutError'?'timeout':'fetch';console.warn('ISS fetch failed',e)}
+ lastIssStep=-1;draw();setTimeout(refreshISS,60000);
+}
+drawHands();draw();refresh();refreshAircraft();refreshISS();setInterval(drawHands,1000/6);setInterval(draw,1000);setInterval(refresh,60000);
+</script>
+</html>
