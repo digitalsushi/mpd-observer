@@ -46,3 +46,16 @@ To return to the live gauge, remove that override, run
 
 Approved and activated on 2026-10-12; the temporary browser override was removed.
 The comparison page remains available for future color and animation iterations.
+
+## Oil needle reading
+
+`cards/oil_vision.py` is installed at `/opt/oil_vision.py` on Sora. It requires
+NumPy and Pillow. Run `python3 test_oil_vision.py -v` beside that module to
+check its consensus rules.
+
+On 2026-10-15 the camera remained reachable but the darkest segmentation
+threshold retained a short needle fragment (54%) while three others agreed
+at 62–63%. The reader now requires at least three thresholds within two
+percentage points, rejecting outliers and ambiguous consensus. The failing
+camera frame verified at 63% after this change. Camera credentials and images
+are not stored in this repository.
